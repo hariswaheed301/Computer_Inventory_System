@@ -158,7 +158,8 @@
 <script>
   document.addEventListener("DOMContentLoaded", function () {
     // Pass Jinja2 data into JavaScript safely [cite: 187, 200]
-    const rawChartData = JSON.parse("{{ chart_data | tojson | escapejs }}");
+    const rawChartData = {{ chart_data | tojson }};
+
 
     const labels = rawChartData.map((item) => item.name);
     const dataValues = rawChartData.map((item) => item.quantity);
