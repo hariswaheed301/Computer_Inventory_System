@@ -4,7 +4,7 @@ from werkzeug.security import generate_password_hash
 
 app = create_app()
 
-def init_database(seed_demo=False):
+def init_and_seed_db():
     with app.app_context():
         # 1. Create Tables
         tables = [
@@ -46,26 +46,10 @@ CREATE TABLE IF NOT EXISTS products (
     cost_price NUMERIC(10, 2) NOT NULL,
     retail_price NUMERIC(10, 2) NOT NULL
 );
-""",
-            """
-            CREATE TABLE IF NOT EXISTS orders (
-                id SERIAL PRIMARY KEY,
-                product_id INT NOT NULL REFERENCES products(id) ON DELETE RESTRICT,
-                customer_name VARCHAR(100) NOT NULL,
-                quantity INT NOT NULL CHECK (quantity > 0),
-                unit_price NUMERIC(10, 2) NOT NULL,
-                total_price NUMERIC(10, 2) NOT NULL,
-                status VARCHAR(20) NOT NULL DEFAULT 'CONFIRMED',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            );
-            """,
+"""
         ]
         for t in tables:
             execute_query(t, commit=True)
-
-        # Demo data is deliberately opt-in and is never created on Render.
-        if not seed_demo:
-            return
 
         # 2. Seed Default Admin & Store User
         admin_exists = execute_query("SELECT id FROM users WHERE username = %s;", ('admin',), fetchone=True)
@@ -86,7 +70,7 @@ CREATE TABLE IF NOT EXISTS products (
         if not cat_exists:
             execute_query("INSERT INTO categories (name) VALUES (%s), (%s), (%s);", ('Keyboards', 'Mice', 'Monitors'), commit=True)
             kb_cat = execute_query("SELECT id FROM categories WHERE name = %s;", ('Keyboards',), fetchone=True)
-
+            
             execute_query(
                 "INSERT INTO categories (name, parent_id) VALUES (%s, %s), (%s, %s), (%s, %s);",
                 ('Mechanical Keyboards', kb_cat['id'], 'Silent Keyboards', kb_cat['id'], 'Simple Membrane Keyboards', kb_cat['id']),
@@ -105,7 +89,11 @@ CREATE TABLE IF NOT EXISTS products (
             products = [
                 ('KB-MECH-01', 'BlackWidow V4 Pro', b_razer['id'], sub_mech['id'], 12, 3, 150.00, 220.00),
                 ('KB-SLNT-01', 'MX Keys S Silent', b_logi['id'], sub_silent['id'], 2, 5, 80.00, 110.00),
-                ('KB-SMPL-01', 'Dell Wired K216', b_dell['id'], sub_simple['id'], 0, 5, 10.00, 18.00)
+                ('KB-SMPL-01', 'Dell Wired K216', b_dell['id'], sub_simple['id'], 0, 5, 10.00, 18.00),
+                ('KB-MECH-02', 'BlackWidow V4\5 Pro', b_razer['id'], sub_mech['id'], 12, 3, 240.00, 220.00),
+                ('KB-SLNT-02', 'MX Keys S2 Silent', b_logi['id'], sub_silent['id'], 2, 5, 48.00, 110.00),
+                ('KB-SMPL-03', 'Dell Wired K3216', b_dell['id'], sub_simple['id'], 0, 5, 29.00, 18.00)
+                
             ]
             for p in products:
                 execute_query(
@@ -115,12 +103,8 @@ CREATE TABLE IF NOT EXISTS products (
                     """,
                     p, commit=True
                 )
-
-
-def init_and_seed_db():
-    """Local-development helper that creates schema plus demo data."""
-    init_database(seed_demo=True)
+init_and_seed_db()
 
 if __name__ == '__main__':
-    init_and_seed_db()
+   
     app.run(debug=True, port=5000)
