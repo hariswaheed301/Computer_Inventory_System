@@ -105,6 +105,15 @@
                 </div>
                 Store
               </a>
+              {% if current_user.is_authenticated and current_user.role == 'ADMIN' %}
+              <div class="sb-sidenav-menu-heading">Staff Accounts</div>
+              <a class="nav-link" href="{{ url_for('auth.register') }}">
+                <div class="sb-nav-link-icon">
+                  <i class="fas fa-user-plus"></i>
+                </div>
+                Register Staff
+              </a>
+              {% endif %}
             </div>
           </div>
 
