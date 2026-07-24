@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}{{ product.name }} | Store{% endblock %}
+
+{% block content %}
+<div class="container py-4">
+  <a href="{{ url_for('store.store_catalog') }}" class="btn btn-outline-primary btn-sm mb-4">
+    <i class="fas fa-arrow-left me-1"></i>Back to Store
+  </a>
+  <div class="card shadow-sm border-0">
+    <div class="row g-0">
+      <div class="col-md-5 bg-light d-flex align-items-center justify-content-center p-4">
+        <img src="{{ url_for('static', filename='uploads/products/' + (product.image_url or 'default_product.png')) }}" alt="{{ product.name }}" class="img-fluid" style="max-height: 320px; object-fit: contain;">
+      </div>
+      <div class="col-md-7">
+        <div class="card-body p-4">
+          <div class="text-primary fw-semibold small text-uppercase">{{ product.brand_name or 'Generic' }}</div>
+          <h1 class="h2 mt-1">{{ product.name }}</h1>
+          <p class="text-muted mb-2">SKU: {{ product.sku }} · {{ product.category_name or 'Uncategorized' }}</p>
+          <div class="h3 text-success mb-4">${{ "%.2f"|format(product.retail_price) }}</div>
+          <p>{{ product.description or 'No description is available for this product.' }}</p>
+          {% if product.quantity > 0 %}
+          <span class="badge bg-success fs-6">In Stock — {{ product.quantity }} available</span>
+          <form method="POST" action="{{ url_for('store.confirm_order', product_id=product.id) }}" class="border-top mt-4 pt-3">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <h2 class="h5 mb-3">Place an Order</h2>
+            <div class="row g-2 align-items-end">
+              <div class="col-sm-6">
+                <label for="customer_name" class="form-label">Your name</label>
+                <input id="customer_name" name="customer_name" class="form-control" maxlength="100" required>
+              </div>
+              <div class="col-sm-3">
+                <label for="quantity" class="form-label">Quantity</label>
+                <input id="quantity" name="quantity" type="number" class="form-control" min="1" max="{{ product.quantity }}" value="1" required>
+              </div>
+              <div class="col-sm-3">
+                <button class="btn btn-primary w-100" type="submit">
+                  <i class="fas fa-check-circle me-1"></i>Confirm Order
+                </button>
+              </div>
+            </div>
+          </form>
+          {% else %}
+          <span class="badge bg-danger fs-6">Out of Stock</span>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

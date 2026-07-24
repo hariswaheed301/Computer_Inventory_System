@@ -1,0 +1,91 @@
+{% extends "base.html" %} {% block title %}Dashboard - Tech Inventory{% endblock
+%} {% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+  <div>
+    <h1 class="h3 mb-0 text-gray-800">Store Overview</h1>
+    <p class="text-muted small mb-0">Hardware stock metrics & alert status</p>
+  </div>
+</div>
+
+<div class="row">
+  <!-- Total Hardware SKUs Card -->
+  <div class="col-xl-4 col-md-6 mb-4">
+    <div class="card border-start border-primary border-4 shadow-sm h-100 py-2">
+      <div class="card-body">
+        <div class="row align-items-center">
+          <div class="col me-2">
+            <div class="text-xs fw-bold text-primary text-uppercase mb-1">
+              Total Hardware SKUs
+            </div>
+            <div class="h2 mb-0 fw-bold text-gray-800">{{ total_skus }}</div>
+          </div>
+          <div class="col-auto">
+            <i
+              class="fas fa-boxes-stacked fa-2x text-gray-300 text-primary opacity-50"
+            ></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Out of Stock Alert Card -->
+  <div class="col-xl-4 col-md-6 mb-4">
+    <div class="card border-start border-danger border-4 shadow-sm h-100 py-2">
+      <div class="card-body">
+        <div class="row align-items-center">
+          <div class="col me-2">
+            <div class="text-xs fw-bold text-danger text-uppercase mb-1">
+              Out of Stock (NIL)
+            </div>
+            <div class="h2 mb-0 fw-bold text-danger">{{ out_of_stock }}</div>
+          </div>
+          <div class="col-auto">
+            <i
+              class="fas fa-exclamation-triangle fa-2x text-danger opacity-50"
+            ></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Low Stock Warning Card -->
+  <div class="col-xl-4 col-md-6 mb-4">
+    <div class="card border-start border-warning border-4 shadow-sm h-100 py-2">
+      <div class="card-body">
+        <div class="row align-items-center">
+          <div class="col me-2">
+            <div class="text-xs fw-bold text-warning text-uppercase mb-1">
+              Low Stock Alerts
+            </div>
+            <div class="h2 mb-0 fw-bold text-dark">{{ low_stock }}</div>
+          </div>
+          <div class="col-auto">
+            <i class="fas fa-cubes-stacked fa-2x text-warning opacity-50"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Quick Navigation Action -->
+<div class="row mt-3">
+  <div class="col-12">
+    <div class="card shadow-sm">
+      <div class="card-header bg-light fw-bold">
+        <i class="fas fa-rocket me-2"></i>Quick Actions
+      </div>
+      <div class="card-body d-flex gap-2">
+        <a
+          href="{{ url_for('stock.inventory') }}"
+          class="btn btn-outline-primary"
+        >
+          <i class="fas fa-list me-1"></i> View Full Inventory Catalog
+        </a>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
