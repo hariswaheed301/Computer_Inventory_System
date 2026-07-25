@@ -154,12 +154,16 @@
   </div>
 </div>
 
+<script id="inventoryChartData" type="application/json">
+  {{ chart_data | tojson | safe }}
+</script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <script>
   document.addEventListener("DOMContentLoaded", function () {
-    // Pass Jinja2 data into JavaScript safely [cite: 187, 200]
-    const rawChartData = {{ chart_data | tojson }};
-
+    // Load chart data from a JSON script tag so the JS parser stays valid.
+    const rawChartData = JSON.parse(
+      document.getElementById("inventoryChartData").textContent
+    );
 
     const labels = rawChartData.map((item) => item.name);
     const dataValues = rawChartData.map((item) => item.quantity);
