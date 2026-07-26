@@ -28,7 +28,7 @@
           <hr />
 
           <h3 class="text-success fw-bold">
-            ${{ "%.2f"|format(product.retail_price) }}
+            ₨{{ "%.2f"|format(product.retail_price) }}
           </h3>
 
           {% if current_user.role == 'ADMIN' %}
@@ -36,7 +36,7 @@
             <strong
               ><i class="fas fa-lock me-1"></i> Cost Price (Admin Only):</strong
             >
-            ${{ "%.2f"|format(product.cost_price) }}
+            ₨{{ "%.2f"|format(product.cost_price) }}
           </div>
           {% endif %}
 

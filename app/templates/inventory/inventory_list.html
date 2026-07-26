@@ -351,12 +351,12 @@ products}</span>
 
                 {% if current_user.role == 'ADMIN' %}
                 <td class="text-danger fw-bold">
-                  ${{ "%.2f"|format(product.cost_price or 0.0) }}
+                  ₨{{ "%.2f"|format(product.cost_price or 0.0) }}
                 </td>
                 {% endif %}
 
                 <td class="fw-bold text-success">
-                  ${{ "%.2f"|format(product.retail_price or 0.0) }}
+                  ₨{{ "%.2f"|format(product.retail_price or 0.0) }}
                 </td>
 
                 <td>
