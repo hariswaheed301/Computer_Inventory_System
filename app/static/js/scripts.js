@@ -23,82 +23,80 @@ window.addEventListener('DOMContentLoaded', event => {
         });
     }
 
-    // Product forms: only show subcategories belonging to the selected category.
-    document.querySelectorAll('[data-category-parent]').forEach(parentSelect => {
-        const childSelect = parentSelect.closest('.row').querySelector('[data-category-child]');
-        if (!childSelect) return;
+    // Product forms: show/hide subcategories based on selected parent category
+    const parentCatSelect = document.getElementById('parent_category');
+    const childCatSelect = document.getElementById('subcategory');
 
+    if (parentCatSelect && childCatSelect) {
         const updateSubcategories = () => {
-            const selectedParent = parentSelect.value;
-            let selectedOptionIsVisible = false;
+            const selectedParent = parentCatSelect.value;
+            let foundVisible = false;
 
-            Array.from(childSelect.options).forEach(option => {
-                if (!option.dataset.parentId) return;
+            // Loop through subcategory options and show/hide based on parent
+            for (let i = 0; i < childCatSelect.options.length; i++) {
+                const option = childCatSelect.options[i];
+                if (!option.dataset.parentId) continue;
                 const isVisible = option.dataset.parentId === selectedParent;
                 option.hidden = !isVisible;
                 option.disabled = !isVisible;
-                if (option.selected && isVisible) selectedOptionIsVisible = true;
-            });
+                if (option.selected && isVisible) foundVisible = true;
+            }
 
-            childSelect.disabled = !selectedParent;
-            if (!selectedOptionIsVisible) childSelect.value = '';
+            // Enable/disable subcategory dropdown based on parent selection
+            childCatSelect.disabled = !selectedParent;
+            if (!foundVisible) childCatSelect.value = '';
         };
 
-        // On edit, infer the parent from the currently selected subcategory.
-        const selectedChild = childSelect.options[childSelect.selectedIndex];
+        // On edit page: infer parent from currently selected subcategory
+        const selectedChild = childCatSelect.options[childCatSelect.selectedIndex];
         if (selectedChild && selectedChild.dataset.parentId) {
-            parentSelect.value = selectedChild.dataset.parentId;
+            parentCatSelect.value = selectedChild.dataset.parentId;
         }
 
-        parentSelect.addEventListener('change', updateSubcategories);
+        parentCatSelect.addEventListener('change', updateSubcategories);
         updateSubcategories();
-    });
+    }
 
-    // Auto-generate SKU when subcategory or category is selected (Add Product form only)
+    // Auto-generate SKU on Add Product form
     const skuField = document.getElementById('sku_field');
-    const subcategorySelect = document.getElementById('subcategory');
-    const parentCategorySelect = document.getElementById('parent_category');
-
+    
     if (skuField) {
-        // Function to fetch and set SKU
-        const generateSku = (params) => {
-            const queryString = new URLSearchParams(params).toString();
-            fetch(`/api/generate-sku?${queryString}`)
-                .then(response => response.json())
+        const fetchSku = (params) => {
+            const qs = Object.entries(params).map(([k, v]) => `${k}=${v}`).join('&');
+            fetch(`/api/generate-sku?${qs}`)
+                .then(r => r.json())
                 .then(data => {
-                    if (data.success && data.sku) {
-                        skuField.value = data.sku;
-                    }
+                    if (data.success && data.sku) skuField.value = data.sku;
                 })
-                .catch(error => {
-                    console.error('SKU generation failed:', error);
-                });
+                .catch(err => console.error('SKU generation failed:', err));
         };
 
-        // When subcategory is selected (has subcategories like Keyboard)
-        if (subcategorySelect) {
-            subcategorySelect.addEventListener('change', function() {
-                const subcatId = this.value;
-                if (subcatId) {
-                    generateSku({ subcategory_id: subcatId });
-                }
+        // When subcategory is selected (e.g., Keyboard -> Mechanical, Membrane)
+        if (childCatSelect) {
+            childCatSelect.addEventListener('change', function() {
+                if (this.value) fetchSku({ subcategory_id: this.value });
             });
         }
 
-        // When parent category is selected and no subcategory is chosen
-        // (categories without subcategories like Mouse, Monitors)
-        if (parentCategorySelect) {
-            parentCategorySelect.addEventListener('change', function() {
+        // When parent category is selected AND no subcategory options exist
+        // (e.g., Mouse, Monitors have no subcategories)
+        if (parentCatSelect) {
+            parentCatSelect.addEventListener('change', function() {
                 const catId = this.value;
                 if (!catId) return;
 
-                // Only generate if subcategory is disabled or empty
-                // (meaning this category has no subcategories)
-                if (subcategorySelect && (subcategorySelect.disabled || !subcategorySelect.value)) {
-                    generateSku({ category_id: catId });
-                }
+                // Check if this category has any subcategories visible
+                setTimeout(() => {
+                    const hasVisible = Array.from(childCatSelect.options).some(
+                        o => o.dataset.parentId === catId && !o.hidden
+                    );
+                    if (!hasVisible) {
+                        fetchSku({ category_id: catId });
+                    }
+                }, 0);
             });
         }
     }
+
 
 });

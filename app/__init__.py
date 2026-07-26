@@ -1,4 +1,4 @@
-from flask import Flask, session
+from flask import Flask, session, request
 from flask_login import LoginManager
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
@@ -30,6 +30,17 @@ def create_app(config_class=Config):
     csrf.init_app(app)
     limiter.init_app(app)
 
+    # Disable static file caching in development
+    @app.after_request
+    def add_header(response):
+        """Disable caching for static files in development mode."""
+        if app.config.get('APP_ENV') == 'development':
+            if response.content_type and 'text/' in response.content_type:
+                response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+                response.headers['Pragma'] = 'no-cache'
+                response.headers['Expires'] = '0'
+        return response
+
     # Add Security Headers Middleware
     @app.before_request
     def make_session_permanent():
@@ -40,15 +51,18 @@ def create_app(config_class=Config):
 
     @app.after_request
     def set_security_headers(response):
+        # Fix MIME type for .js files (Flask sometimes serves as text/plain on Windows)
+        if response.content_type and 'text/plain' in response.content_type:
+            path = request.path if hasattr(request, 'path') else ''
+            if path.endswith('.js'):
+                response.content_type = 'application/javascript; charset=utf-8'
+        
         # Force HTTPS in production
         if app.config.get('APP_ENV') == 'production':
             response.headers['Strict-Transport-Security'] = 'max-age=31536000; includeSubDomains'
         
         # Prevent clickjacking
         response.headers['X-Frame-Options'] = 'DENY'
-        
-        # Prevent MIME type sniffing
-        response.headers['X-Content-Type-Options'] = 'nosniff'
         
         # XSS Protection
         response.headers['X-XSS-Protection'] = '1; mode=block'
