@@ -501,51 +501,72 @@ def product_detail(product_id):
 
 
 # ----------------- AUTO-GENERATE SKU -----------------
-@stock_bp.route('/api/generate-sku')
-@login_required
-def generate_sku():
-    """Generate an SKU based on selected subcategory."""
-    subcategory_id = request.args.get('subcategory_id', type=int)
-    if not subcategory_id:
-        return jsonify({'success': False, 'error': 'Subcategory ID required'}), 400
+def derive_category_code(name):
+    """Derive a 2-letter category code from name (e.g., Keyboard -> KB, Monitor -> MN, Mouse -> MS)."""
+    words = name.split()
+    code = ''.join([w[0] for w in words if w])[:2].upper()
+    if len(code) < 2:
+        code = name[:2].upper()
+    return code
 
-    # Fetch subcategory and its parent
-    subcat = execute_query("""
-        SELECT c.id, c.name, c.parent_id, p.name AS parent_name
-        FROM categories c
-        LEFT JOIN categories p ON c.parent_id = p.id
-        WHERE c.id = %s;
-    """, (subcategory_id,), fetchone=True)
+def derive_subcategory_code(name):
+    """Derive a subcategory code (up to 4 letters) from name."""
+    words = name.split()
+    code = ''.join([w[0] for w in words if w])[:4].upper()
+    if len(code) < 2:
+        code = name[:4].upper()
+    return code
 
-    if not subcat or not subcat['parent_id']:
-        return jsonify({'success': False, 'error': 'Invalid subcategory'}), 400
-
-    # Derive codes
-    parent_name = subcat['parent_name']
-    sub_name = subcat['name']
-
-    # Category code: first 2 uppercase letters
-    parent_code = ''.join([w[0] for w in parent_name.split() if w])[:2].upper()
-    if len(parent_code) < 2:
-        parent_code = parent_name[:2].upper()
-
-    # Subcategory code: first 4 uppercase letters from key words
-    words = sub_name.split()
-    sub_code = ''.join([w[0] for w in words if w])[:4].upper()
-    if len(sub_code) < 2:
-        sub_code = sub_name[:4].upper()
-
-    prefix = f"{parent_code}-{sub_code}-"
-
-    # Find max existing sequence number for this prefix
+def get_next_sku_sequence(prefix):
+    """Get the next sequence number for a given SKU prefix."""
     result = execute_query("""
         SELECT MAX(CAST(SUBSTRING(sku FROM LENGTH(%s) + 1) AS INTEGER)) AS max_seq
         FROM products
         WHERE sku LIKE %s;
     """, (prefix, f"{prefix}%"), fetchone=True)
+    return (result['max_seq'] or 0) + 1
 
-    next_seq = (result['max_seq'] or 0) + 1
-    sku = f"{parent_code}-{sub_code}-{next_seq:03d}"
+@stock_bp.route('/api/generate-sku')
+@login_required
+def generate_sku():
+    """Generate an SKU based on selected subcategory or category."""
+    subcategory_id = request.args.get('subcategory_id', type=int)
+    category_id = request.args.get('category_id', type=int)
+
+    if subcategory_id:
+        # Has subcategory: use pattern {CATEGORY_CODE}-{SUBCATEGORY_CODE}-{SEQ}
+        subcat = execute_query("""
+            SELECT c.id, c.name, c.parent_id, p.name AS parent_name
+            FROM categories c
+            LEFT JOIN categories p ON c.parent_id = p.id
+            WHERE c.id = %s;
+        """, (subcategory_id,), fetchone=True)
+
+        if not subcat or not subcat['parent_id']:
+            return jsonify({'success': False, 'error': 'Invalid subcategory'}), 400
+
+        parent_code = derive_category_code(subcat['parent_name'])
+        sub_code = derive_subcategory_code(subcat['name'])
+        prefix = f"{parent_code}-{sub_code}-"
+        next_seq = get_next_sku_sequence(prefix)
+        sku = f"{parent_code}-{sub_code}-{next_seq:03d}"
+
+    elif category_id:
+        # No subcategory: use pattern {CATEGORY_CODE}-XXX-{SEQ}
+        cat = execute_query("""
+            SELECT id, name FROM categories WHERE id = %s;
+        """, (category_id,), fetchone=True)
+
+        if not cat:
+            return jsonify({'success': False, 'error': 'Invalid category'}), 400
+
+        cat_code = derive_category_code(cat['name'])
+        prefix = f"{cat_code}-XXX-"
+        next_seq = get_next_sku_sequence(prefix)
+        sku = f"{cat_code}-XXX-{next_seq:03d}"
+
+    else:
+        return jsonify({'success': False, 'error': 'Category or subcategory ID required'}), 400
 
     return jsonify({'success': True, 'sku': sku})
 
