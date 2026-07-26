@@ -150,8 +150,8 @@ class User(UserMixin):
   # adding two methods for manage users for admin panel
     @staticmethod
     def get_all_users():
-        """Get all users (for admin panel)."""
-        query = "SELECT id, username, email, role FROM users ORDER BY username;"
+        """Get all non-admin users (for admin panel)."""
+        query = "SELECT id, username, email, role FROM users WHERE role = 'STORE_PERSON' ORDER BY username;"
         return execute_query(query, fetchall=True)
 
     @staticmethod
@@ -170,12 +170,14 @@ class User(UserMixin):
         from app.config import Config
         return code == Config.ADMIN_RECOVERY_CODE and Config.ADMIN_RECOVERY_CODE != ''  
 
-    def role_required(*roles):
-        def decorator(f):
-            @wraps(f)
-            def decorated_function(*args, **kwargs):
-                if not current_user.is_authenticated or current_user.role not in roles:
-                    abort(403)
-                return f(*args, **kwargs)
-            return decorated_function
-        return decorator
+
+def role_required(*roles):
+    """Decorator to restrict access to specific roles."""
+    def decorator(f):
+        @wraps(f)
+        def decorated_function(*args, **kwargs):
+            if not current_user.is_authenticated or current_user.role not in roles:
+                abort(403)
+            return f(*args, **kwargs)
+        return decorated_function
+    return decorator

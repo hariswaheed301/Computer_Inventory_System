@@ -25,6 +25,12 @@ class Config:
     # Scheme & Redirect
     PREFERRED_URL_SCHEME = 'https' if APP_ENV == 'production' else 'http'
     
+    # Admin Recovery Code for Password Reset
+    ADMIN_RECOVERY_CODE = os.environ.get('ADMIN_RECOVERY_CODE', '')
+
     # Rate Limiter Config
     RATELIMIT_STORAGE_URL = "memory://"
     RATELIMIT_DEFAULT = "200/day;50/hour"
+    
+        # Admin Recovery
+    ADMIN_RECOVERY_CODE = os.environ.get('ADMIN_RECOVERY_CODE', '')

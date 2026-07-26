@@ -56,11 +56,11 @@ def create_app(config_class=Config):
         # Referrer Policy
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
         
-        # Content Security Policy (allow only same-origin + CDN resources)
+        # Content Security Policy
         response.headers['Content-Security-Policy'] = (
             "default-src 'self'; "
-            "script-src 'self' cdn.jsdelivr.net use.fontawesome.com; "
-            "style-src 'self' cdn.jsdelivr.net; "
+            "script-src 'self' 'unsafe-inline' cdn.jsdelivr.net use.fontawesome.com cdnjs.cloudflare.com; "
+            "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdnjs.cloudflare.com use.fontawesome.com; "
             "font-src 'self' cdnjs.cloudflare.com use.fontawesome.com; "
             "img-src 'self' data: https:; "
             "connect-src 'self'"
@@ -71,9 +71,11 @@ def create_app(config_class=Config):
     # Register Blueprints
     from app.routes.auth_routes import auth_bp
     from app.routes.stock_routes import stock_bp
+    from app.routes.store_routes import store_bp
 
     app.register_blueprint(auth_bp)
     app.register_blueprint(stock_bp)
+    app.register_blueprint(store_bp)
     
     # Apply rate limiting to login endpoint
     limiter.limit("5 per 15 minutes")(app.view_functions['auth.login'])
