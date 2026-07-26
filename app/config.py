@@ -19,7 +19,8 @@ class Config:
     SESSION_COOKIE_HTTPONLY = True
     SESSION_COOKIE_SAMESITE = 'Lax'
     SESSION_COOKIE_NAME = '__Secure-session' if APP_ENV == 'production' else 'session'
-    PERMANENT_SESSION_LIFETIME = 900  # 15 minutes
+    PERMANENT_SESSION_LIFETIME = 900  # 15 minutes of inactivity before auto-logout
+    SESSION_REFRESH_EACH_REQUEST = True  # Reset timer on each request
     
     # Scheme & Redirect
     PREFERRED_URL_SCHEME = 'https' if APP_ENV == 'production' else 'http'

@@ -15,7 +15,11 @@ def init_and_seed_db():
                 email VARCHAR(100) UNIQUE NOT NULL,
                 password_hash VARCHAR(255) NOT NULL,
                 role VARCHAR(20) NOT NULL DEFAULT 'STORE_PERSON',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                failed_login_attempts INT DEFAULT 0,
+                is_locked BOOLEAN DEFAULT FALSE,
+                locked_until TIMESTAMP,
+                last_login_attempt TIMESTAMP
             );
             """,
             """
@@ -50,6 +54,20 @@ CREATE TABLE IF NOT EXISTS products (
         ]
         for t in tables:
             execute_query(t, commit=True)
+
+        # 1.5 Add Missing Columns (Migrations)
+        migrations = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT DEFAULT 0;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_locked BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_attempt TIMESTAMP;"
+        ]
+        for migration in migrations:
+            try:
+                execute_query(migration, commit=True)
+            except Exception as e:
+                # Column might already exist or other error - continue
+                print(f"Migration note: {e}")
 
         # 2. Seed Default Admin & Store User
         admin_exists = execute_query("SELECT id FROM users WHERE username = %s;", ('admin',), fetchone=True)
