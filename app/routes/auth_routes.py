@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session
 from flask_login import login_user, logout_user, login_required
 from app.models.users import User, role_required
 from datetime import datetime, timedelta
@@ -93,3 +93,136 @@ def logout():
     logout_user()
     flash('Logged out successfully.', 'info')
     return redirect(url_for('auth.login'))
+
+
+
+@auth_bp.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        identifier = request.form.get('identifier', '').strip()
+        
+        if not identifier:
+            flash('Please enter username or email.', 'danger')
+            return render_template('auth/forgot_password.html')
+        
+        user = User.get_by_username_or_email(identifier)
+        
+        if not user:
+            # Security: Don't reveal if user exists
+            flash('If an account exists, a recovery message will be shown.', 'info')
+            return render_template('auth/forgot_password.html')
+        
+        # Role-based response
+        if user.role == 'STORE_PERSON':
+            flash(f'Your account is managed by your administrator. Please contact: admin@techstore.com', 'info')
+            return render_template('auth/forgot_password.html')
+        elif user.role == 'ADMIN':
+            # Store user ID in session for recovery code verification
+            session['recovery_user_id'] = user.id
+            return redirect(url_for('auth.verify_recovery_code'))
+    
+    return render_template('auth/forgot_password.html')
+
+@auth_bp.route('/verify-recovery-code', methods=['GET', 'POST'])
+def verify_recovery_code():
+    recovery_user_id = session.get('recovery_user_id')
+    
+    if not recovery_user_id:
+        flash('Invalid recovery session. Please try again.', 'danger')
+        return redirect(url_for('auth.forgot_password'))
+    
+    if request.method == 'POST':
+        code = request.form.get('recovery_code', '').strip()
+        
+        if User.is_recovery_code_valid(code):
+            session['recovery_verified'] = True
+            session['recovery_user_id'] = recovery_user_id
+            return redirect(url_for('auth.reset_password'))
+        else:
+            flash('Invalid recovery code. Please try again.', 'danger')
+    
+    return render_template('auth/verify_recovery_code.html')
+
+@auth_bp.route('/reset-password', methods=['GET', 'POST'])
+def reset_password():
+    if not session.get('recovery_verified'):
+        flash('Recovery verification required. Please start over.', 'danger')
+        return redirect(url_for('auth.forgot_password'))
+    
+    recovery_user_id = session.get('recovery_user_id')
+    
+    if request.method == 'POST':
+        new_password = request.form.get('new_password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        
+        if not new_password or not confirm_password:
+            flash('Password fields are required.', 'danger')
+            return render_template('auth/reset_password.html')
+        
+        if new_password != confirm_password:
+            flash('Passwords do not match.', 'danger')
+            return render_template('auth/reset_password.html')
+        
+        validation_errors = User.validate_input('temp', 'temp@temp.com', new_password)
+        if validation_errors:
+            for error in validation_errors:
+                flash(error, 'danger')
+            return render_template('auth/reset_password.html')
+        
+        # Update password
+        User.update_password(recovery_user_id, new_password)
+        
+        # Clear session
+        session.pop('recovery_verified', None)
+        session.pop('recovery_user_id', None)
+        
+        flash('Password reset successfully! Please login with your new password.', 'success')
+        return redirect(url_for('auth.login'))
+    
+    return render_template('auth/reset_password.html')
+
+@auth_bp.route('/manage-users')
+@login_required
+@role_required('ADMIN')
+def manage_users():
+    """Admin page to view and manage all users."""
+    users = User.get_all_users()
+    return render_template('auth/manage_users.html', users=users)
+
+
+@auth_bp.route('/admin/reset-user-password/<int:user_id>', methods=['GET', 'POST'])
+@login_required
+@role_required('ADMIN')
+def admin_reset_user_password(user_id):
+    # Get the user to reset
+    user_to_reset = User.get_by_id(user_id)
+    
+    if not user_to_reset or user_to_reset.role == 'ADMIN':
+        flash('Invalid user or cannot reset admin password.', 'danger')
+        return redirect(url_for('stock.dashboard'))
+    
+    if request.method == 'POST':
+        new_password = request.form.get('new_password', '')
+        confirm_password = request.form.get('confirm_password', '')
+        
+        if not new_password or not confirm_password:
+            flash('Password fields are required.', 'danger')
+            return render_template('auth/admin_reset_user_password.html', user=user_to_reset)
+        
+        if new_password != confirm_password:
+            flash('Passwords do not match.', 'danger')
+            return render_template('auth/admin_reset_user_password.html', user=user_to_reset)
+        
+        validation_errors = User.validate_input('temp', 'temp@temp.com', new_password)
+        if validation_errors:
+            for error in validation_errors:
+                flash(error, 'danger')
+            return render_template('auth/admin_reset_user_password.html', user=user_to_reset)
+        
+        # Update password
+        User.update_password(user_id, new_password)
+        
+        flash(f'Password for {user_to_reset.username} has been reset successfully.', 'success')
+        return redirect(url_for('stock.dashboard'))
+    
+    return render_template('auth/admin_reset_user_password.html', user=user_to_reset)

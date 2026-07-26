@@ -146,13 +146,36 @@ class User(UserMixin):
             (user_id,),
             commit=True
         )
+    
+  # adding two methods for manage users for admin panel
+    @staticmethod
+    def get_all_users():
+        """Get all users (for admin panel)."""
+        query = "SELECT id, username, email, role FROM users ORDER BY username;"
+        return execute_query(query, fetchall=True)
 
-def role_required(*roles):
-    def decorator(f):
-        @wraps(f)
-        def decorated_function(*args, **kwargs):
-            if not current_user.is_authenticated or current_user.role not in roles:
-                abort(403)
-            return f(*args, **kwargs)
-        return decorated_function
-    return decorator
+    @staticmethod
+    def update_password(user_id, new_password):
+        """Update user password and unlock account."""
+        hashed_password = generate_password_hash(new_password)
+        execute_query(
+            "UPDATE users SET password_hash = %s, failed_login_attempts = 0, is_locked = FALSE, locked_until = NULL WHERE id = %s;",
+            (hashed_password, user_id),
+            commit=True
+        )
+
+    @staticmethod
+    def is_recovery_code_valid(code):
+        """Validate recovery code against environment variable."""
+        from app.config import Config
+        return code == Config.ADMIN_RECOVERY_CODE and Config.ADMIN_RECOVERY_CODE != ''  
+
+    def role_required(*roles):
+        def decorator(f):
+            @wraps(f)
+            def decorated_function(*args, **kwargs):
+                if not current_user.is_authenticated or current_user.role not in roles:
+                    abort(403)
+                return f(*args, **kwargs)
+            return decorated_function
+        return decorator

@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Verify Recovery Code - Hardware Inventory</title>
+    <link
+      href="{{ url_for('static', filename='css/styles.css') }}"
+      rel="stylesheet"
+    />
+  </head>
+  <body class="bg-primary">
+    <div class="container mt-5">
+      <div class="row justify-content-center">
+        <div class="col-lg-5">
+          <div class="card shadow-lg border-0 rounded-lg">
+            <div class="card-header">
+              <h3 class="text-center my-3">Enter Recovery Code</h3>
+            </div>
+            <div class="card-body">
+              {% with messages = get_flashed_messages(with_categories=true) %}
+              {% if messages %} {% for category, message in messages %}
+              <div class="alert alert-{{ category }}">{{ message }}</div>
+              {% endfor %} {% endif %} {% endwith %}
+
+              <form
+                method="POST"
+                action="{{ url_for('auth.verify_recovery_code') }}"
+              >
+                <input
+                  type="hidden"
+                  name="csrf_token"
+                  value="{{ csrf_token() }}"
+                />
+                <p class="text-muted small">
+                  Enter the recovery code to proceed with password reset.
+                </p>
+                <div class="form-floating mb-3">
+                  <input
+                    class="form-control"
+                    name="recovery_code"
+                    type="password"
+                    placeholder="Recovery Code"
+                    required
+                  />
+                  <label>Recovery Code</label>
+                </div>
+                <button class="btn btn-primary w-100 py-2" type="submit">
+                  Verify Code
+                </button>
+              </form>
+              <div class="text-center mt-3">
+                <a href="{{ url_for('auth.login') }}" class="small"
+                  >Back to Login</a
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
