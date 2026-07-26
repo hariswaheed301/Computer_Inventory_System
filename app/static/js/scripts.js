@@ -54,4 +54,27 @@ window.addEventListener('DOMContentLoaded', event => {
         updateSubcategories();
     });
 
+    // Auto-generate SKU when subcategory is selected (Add Product form only)
+    const skuField = document.getElementById('sku_field');
+    const subcategorySelect = document.getElementById('subcategory');
+    if (skuField && subcategorySelect) {
+        subcategorySelect.addEventListener('change', function() {
+            const subcatId = this.value;
+            if (!subcatId) return;
+
+            // Fetch generated SKU from backend
+            fetch(`/api/generate-sku?subcategory_id=${subcatId}`)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success && data.sku) {
+                        skuField.value = data.sku;
+                    }
+                })
+                .catch(error => {
+                    console.error('SKU generation failed:', error);
+                    // Leave SKU field editable as fallback
+                });
+        });
+    }
+
 });

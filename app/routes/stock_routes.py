@@ -500,6 +500,56 @@ def product_detail(product_id):
     return render_template('inventory/product_detail.html', product=product)
 
 
+# ----------------- AUTO-GENERATE SKU -----------------
+@stock_bp.route('/api/generate-sku')
+@login_required
+def generate_sku():
+    """Generate an SKU based on selected subcategory."""
+    subcategory_id = request.args.get('subcategory_id', type=int)
+    if not subcategory_id:
+        return jsonify({'success': False, 'error': 'Subcategory ID required'}), 400
+
+    # Fetch subcategory and its parent
+    subcat = execute_query("""
+        SELECT c.id, c.name, c.parent_id, p.name AS parent_name
+        FROM categories c
+        LEFT JOIN categories p ON c.parent_id = p.id
+        WHERE c.id = %s;
+    """, (subcategory_id,), fetchone=True)
+
+    if not subcat or not subcat['parent_id']:
+        return jsonify({'success': False, 'error': 'Invalid subcategory'}), 400
+
+    # Derive codes
+    parent_name = subcat['parent_name']
+    sub_name = subcat['name']
+
+    # Category code: first 2 uppercase letters
+    parent_code = ''.join([w[0] for w in parent_name.split() if w])[:2].upper()
+    if len(parent_code) < 2:
+        parent_code = parent_name[:2].upper()
+
+    # Subcategory code: first 4 uppercase letters from key words
+    words = sub_name.split()
+    sub_code = ''.join([w[0] for w in words if w])[:4].upper()
+    if len(sub_code) < 2:
+        sub_code = sub_name[:4].upper()
+
+    prefix = f"{parent_code}-{sub_code}-"
+
+    # Find max existing sequence number for this prefix
+    result = execute_query("""
+        SELECT MAX(CAST(SUBSTRING(sku FROM LENGTH(%s) + 1) AS INTEGER)) AS max_seq
+        FROM products
+        WHERE sku LIKE %s;
+    """, (prefix, f"{prefix}%"), fetchone=True)
+
+    next_seq = (result['max_seq'] or 0) + 1
+    sku = f"{parent_code}-{sub_code}-{next_seq:03d}"
+
+    return jsonify({'success': True, 'sku': sku})
+
+
 # ----------------- ADMIN STOCK / PRODUCT REMOVAL -----------------
 @stock_bp.route('/product/<int:product_id>/remove-units', methods=['POST'])
 @login_required

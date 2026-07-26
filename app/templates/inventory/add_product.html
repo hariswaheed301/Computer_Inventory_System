@@ -17,8 +17,9 @@
           <input
             type="text"
             name="sku"
+            id="sku_field"
             class="form-control"
-            placeholder="e.g. KB-RAZER-01"
+            placeholder="Auto-generated when subcategory is selected"
             required
           />
         </div>
@@ -39,24 +40,34 @@
         </div>
         <div class="col-md-4">
           <label class="form-label fw-bold">Category</label>
-          <select id="parent_category" class="form-select" data-category-parent required>
+          <select
+            id="parent_category"
+            class="form-select"
+            data-category-parent
+            required
+          >
             <option value="" selected disabled>Select a category</option>
-            {% for c in categories %}
-            {% if c.parent_id is none %}
+            {% for c in categories %} {% if c.parent_id is none %}
             <option value="{{ c.id }}">{{ c.name }}</option>
-            {% endif %}
-            {% endfor %}
+            {% endif %} {% endfor %}
           </select>
         </div>
         <div class="col-md-4">
           <label class="form-label fw-bold">Subcategory</label>
-          <select id="subcategory" name="category_id" class="form-select" data-category-child required disabled>
+          <select
+            id="subcategory"
+            name="category_id"
+            class="form-select"
+            data-category-child
+            required
+            disabled
+          >
             <option value="" selected disabled>Select a category first</option>
-            {% for c in categories %}
-            {% if c.parent_id is not none %}
-            <option value="{{ c.id }}" data-parent-id="{{ c.parent_id }}">{{ c.name }}</option>
-            {% endif %}
-            {% endfor %}
+            {% for c in categories %} {% if c.parent_id is not none %}
+            <option value="{{ c.id }}" data-parent-id="{{ c.parent_id }}">
+              {{ c.name }}
+            </option>
+            {% endif %} {% endfor %}
           </select>
         </div>
       </div>
