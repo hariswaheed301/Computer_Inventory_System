@@ -157,53 +157,48 @@
 <script id="inventoryChartData" type="application/json">
   {{ chart_data | tojson | safe }}
 </script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+{% endblock %} {% block scripts %}
 <script>
   document.addEventListener("DOMContentLoaded", function () {
-    // Load chart data from a JSON script tag so the JS parser stays valid.
-    const rawChartData = JSON.parse(
-      document.getElementById("inventoryChartData").textContent
-    );
+    const chartElement = document.getElementById("inventoryChartData");
+
+    if (!chartElement) {
+      console.log("Chart data element missing");
+      return;
+    }
+
+    const rawChartData = JSON.parse(chartElement.textContent);
 
     const labels = rawChartData.map((item) => item.name);
     const dataValues = rawChartData.map((item) => item.quantity);
 
     const canvas = document.getElementById("inventoryChart");
-    const ctx = canvas.getContext("2d");
-    const inventoryChart = new Chart(ctx, {
-      type: "bar",
-      data: {
-        labels: labels,
-        datasets: [
-          {
-            label: "Units Available in Warehouse",
-            data: dataValues,
-            backgroundColor: "rgba(13, 110, 253, 0.75)",
-            borderColor: "rgba(13, 110, 253, 1)",
-            borderWidth: 1,
-            borderRadius: 4,
-          },
-        ],
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        scales: {
-          y: {
-            beginAtZero: true,
-            ticks: { stepSize: 5 },
-          },
-        },
-        plugins: {
-          legend: { display: true, position: "top" },
-        },
-      },
-    });
 
-    // The observer covers both browser resizing and sidebar/layout changes.
-    new ResizeObserver(() => {
-      requestAnimationFrame(() => inventoryChart.resize());
-    }).observe(canvas.parentElement);
+    if (canvas && typeof Chart !== "undefined") {
+      const ctx = canvas.getContext("2d");
+
+      new Chart(ctx, {
+        type: "bar",
+        data: {
+          labels: labels,
+          datasets: [
+            {
+              label: "Units Available",
+              data: dataValues,
+              backgroundColor: "rgba(13,110,253,0.75)",
+              borderColor: "rgba(13,110,253,1)",
+              borderWidth: 1,
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+        },
+      });
+    } else {
+      console.log("Chart.js not loaded");
+    }
   });
 </script>
 {% endblock %}

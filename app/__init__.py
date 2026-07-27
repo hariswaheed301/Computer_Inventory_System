@@ -1,18 +1,18 @@
-from flask import Flask, session, request
+import logging
+import sys
+from flask import Flask, session, request, jsonify, render_template, redirect, flash, url_for
 from flask_login import LoginManager
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from app.config import Config
 from app.models.users import User
-from datetime import timedelta
+
 
 login_manager = LoginManager()
 csrf = CSRFProtect()
 limiter = Limiter(
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
-    storage_uri="memory://"
+    key_func=get_remote_address
 )
 
 @login_manager.user_loader
@@ -23,6 +23,19 @@ def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
 
+    # Configure logging
+    log_level = logging.DEBUG if app.config.get('APP_ENV') == 'development' else logging.INFO
+    logging.basicConfig(
+        level=log_level,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.StreamHandler(sys.stdout),
+            logging.FileHandler('app.log') if app.config.get('APP_ENV') == 'production' else logging.NullHandler()
+        ]
+    )
+    app.logger.setLevel(log_level)
+    app.logger.info(f"Application starting in {app.config.get('APP_ENV')} mode")
+
     login_manager.init_app(app)
     login_manager.login_view = 'auth.login'
     login_manager.login_message_category = 'warning'
@@ -30,24 +43,15 @@ def create_app(config_class=Config):
     csrf.init_app(app)
     limiter.init_app(app)
 
-    # Disable static file caching in development
-    @app.after_request
-    def add_header(response):
-        """Disable caching for static files in development mode."""
-        if app.config.get('APP_ENV') == 'development':
-            if response.content_type and 'text/' in response.content_type:
-                response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
-                response.headers['Pragma'] = 'no-cache'
-                response.headers['Expires'] = '0'
-        return response
+
 
     # Add Security Headers Middleware
     @app.before_request
-    def make_session_permanent():
-        """Ensure session is marked permanent for timeout handling."""
+    def manage_session():
+
         session.permanent = True
-        app.permanent_session_lifetime = timedelta(minutes=15)
-        session.modified = True
+
+
 
     @app.after_request
     def set_security_headers(response):
@@ -73,14 +77,40 @@ def create_app(config_class=Config):
         # Content Security Policy
         response.headers['Content-Security-Policy'] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' cdn.jsdelivr.net use.fontawesome.com cdnjs.cloudflare.com; "
-            "style-src 'self' 'unsafe-inline' cdn.jsdelivr.net cdnjs.cloudflare.com use.fontawesome.com; "
-            "font-src 'self' cdnjs.cloudflare.com use.fontawesome.com; "
-            "img-src 'self' data: https:; "
-            "connect-src 'self'"
-        )
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "font-src 'self'; "
+            "img-src 'self' data:; "
+            "connect-src 'self';"
+)
+        response.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+        response.headers['Pragma'] = 'no-cache'
+        response.headers['Expires'] = '0'
+
         
         return response
+
+    # Global error handlers
+    @app.errorhandler(404)
+    def not_found(error):
+        app.logger.warning(f"404 Not Found: {request.path}")
+        return render_template('errors/404.html'), 404
+
+    @app.errorhandler(403)
+    def forbidden(error):
+        app.logger.warning(f"403 Forbidden: {request.path} by {request.remote_addr}")
+        return render_template('errors/403.html'), 403
+
+    @app.errorhandler(500)
+    def internal_error(error):
+        app.logger.error(f"500 Internal Error: {request.path} - {str(error)}")
+        return render_template('errors/500.html'), 500
+
+    @app.errorhandler(429)
+    def ratelimit_error(error):
+        app.logger.warning(f"429 Rate Limited: {request.remote_addr} on {request.path}")
+        flash('Too many requests. Please slow down.', 'warning')
+        return redirect(url_for('auth.login'))
 
     # Register Blueprints
     from app.routes.auth_routes import auth_bp

@@ -48,6 +48,7 @@ class User(UserMixin):
     @staticmethod
     def create(username, email, password, role='STORE_PERSON'):
         hashed_password = generate_password_hash(password)
+        
         query = """
             INSERT INTO users (username, email, password_hash, role)
             VALUES (%s, %s, %s, %s) RETURNING id;

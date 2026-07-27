@@ -22,7 +22,11 @@
               <div class="alert alert-{{ category }}">{{ message }}</div>
               {% endfor %} {% endif %} {% endwith %}
 
-              <form method="POST" action="{{ url_for('auth.login') }}">
+              <form
+                id="loginForm"
+                method="POST"
+                action="{{ url_for('auth.login') }}"
+              >
                 <input
                   type="hidden"
                   name="csrf_token"
@@ -32,9 +36,10 @@
                   <input
                     class="form-control"
                     name="identifier"
+                    id="identifierInput"
                     type="text"
                     placeholder="Username or Email"
-                    autocomplete="username"
+                    autocomplete="off"
                     required
                   />
                   <label>Username or Email</label>
@@ -43,9 +48,10 @@
                   <input
                     class="form-control"
                     name="password"
+                    id="passwordInput"
                     type="password"
                     placeholder="Password"
-                    autocomplete="current-password"
+                    autocomplete="off"
                     required
                   />
                   <label>Password</label>

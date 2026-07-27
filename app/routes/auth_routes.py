@@ -1,7 +1,8 @@
-from flask import Blueprint, render_template, redirect, url_for, flash, request, session
+from flask import Blueprint, render_template, redirect, url_for, flash, request, session, make_response, current_app
 from flask_login import login_user, logout_user, login_required
 from app.models.users import User, role_required
-from datetime import datetime, timedelta
+from datetime import datetime
+from app.config import Config
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -64,10 +65,17 @@ def login():
             # Clear failed attempts on successful login
             User.clear_failed_login(user.id)
             
-            # Set permanent session for timeout handling
+            # # Set permanent session for timeout handling
+            # login_user(user)
+           # Clear old session data
+            session.clear()
+
+            # Login user
             login_user(user)
-            session = __import__('flask').session
+
+            # Enable timeout
             session.permanent = True
+            session.modified = True
             
             flash('Logged in successfully!', 'success')
             return redirect(url_for('stock.dashboard'))
@@ -90,38 +98,90 @@ def login():
 @auth_bp.route('/logout')
 @login_required
 def logout():
+
     logout_user()
+
+    session.clear()
+
+    response = make_response(
+        redirect(url_for('auth.login'))
+    )
+
+    response.delete_cookie(
+        current_app.config['SESSION_COOKIE_NAME'],
+        path='/'
+    )
+
     flash('Logged out successfully.', 'info')
-    return redirect(url_for('auth.login'))
+
+    return response
+
+
+
+
 
 
 
 @auth_bp.route('/forgot-password', methods=['GET', 'POST'])
 def forgot_password():
+
+    show_form = True
+    store_message = None
+
     if request.method == 'POST':
         identifier = request.form.get('identifier', '').strip()
-        
+
         if not identifier:
             flash('Please enter username or email.', 'danger')
-            return render_template('auth/forgot_password.html')
-        
+            return render_template(
+                'auth/forgot_password.html',
+                show_form=True
+            )
+
         user = User.get_by_username_or_email(identifier)
-        
+
         if not user:
-            # Security: Don't reveal if user exists
-            flash('If an account exists, a recovery message will be shown.', 'info')
-            return render_template('auth/forgot_password.html')
-        
-        # Role-based response
+            # Do not reveal whether user exists
+            flash(
+                'If an account exists, a recovery message will be shown.',
+                'info'
+            )
+            return render_template(
+                'auth/forgot_password.html',
+                show_form=True
+            )
+
+        # Store person cannot reset password
         if user.role == 'STORE_PERSON':
-            flash(f'Your account is managed by your administrator. Please contact: admin@techstore.com', 'info')
-            return render_template('auth/forgot_password.html')
-        elif user.role == 'ADMIN':
-            # Store user ID in session for recovery code verification
+
+            show_form = False
+
+            store_message = (
+                "Your account is managed by your administrator. "
+                f"Please contact: {Config.ADMIN_CONTACT_EMAIL}"
+
+            )
+
+            return render_template(
+                'auth/forgot_password.html',
+                show_form=show_form,
+                store_message=store_message
+            )
+
+
+        # Admin recovery
+        if user.role == 'ADMIN':
             session['recovery_user_id'] = user.id
-            return redirect(url_for('auth.verify_recovery_code'))
-    
-    return render_template('auth/forgot_password.html')
+            return redirect(
+                url_for('auth.verify_recovery_code')
+            )
+
+
+    return render_template(
+        'auth/forgot_password.html',
+        show_form=True
+    )
+
 
 @auth_bp.route('/verify-recovery-code', methods=['GET', 'POST'])
 def verify_recovery_code():

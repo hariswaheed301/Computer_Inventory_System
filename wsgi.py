@@ -1,6 +1,8 @@
+import os
 from app import create_app
 from app.db import execute_query
 from werkzeug.security import generate_password_hash
+from app.config import Config
 
 app = create_app()
 
@@ -13,7 +15,7 @@ def init_and_seed_db():
                 id SERIAL PRIMARY KEY,
                 username VARCHAR(50) UNIQUE NOT NULL,
                 email VARCHAR(100) UNIQUE NOT NULL,
-                password_hash VARCHAR(255) NOT NULL,
+                password_hash VARCHAR(255) NOT NULL,            
                 role VARCHAR(20) NOT NULL DEFAULT 'STORE_PERSON',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 failed_login_attempts INT DEFAULT 0,
@@ -60,7 +62,8 @@ CREATE TABLE IF NOT EXISTS products (
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT DEFAULT 0;",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_locked BOOLEAN DEFAULT FALSE;",
             "ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP;",
-            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_attempt TIMESTAMP;"
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_attempt TIMESTAMP;",
+        
         ]
         for migration in migrations:
             try:
@@ -69,17 +72,36 @@ CREATE TABLE IF NOT EXISTS products (
                 # Column might already exist or other error - continue
                 print(f"Migration note: {e}")
 
+
         # 2. Seed Default Admin & Store User
         admin_exists = execute_query("SELECT id FROM users WHERE username = %s;", ('admin',), fetchone=True)
         if not admin_exists:
+            if not Config.ADMIN_PASSWORD or not Config.STORE_PASSWORD:
+                raise Exception(
+                    "ADMIN_PASSWORD and STORE_PASSWORD must be set in environment variables"
+                )
+
+
             execute_query(
                 "INSERT INTO users (username, email, password_hash, role) VALUES (%s, %s, %s, %s);",
-                ('admin', 'admin@techstore.com', generate_password_hash('admin123'), 'ADMIN'),
+                (
+                    'admin',
+                    'admin@techstore.com',
+                    generate_password_hash(Config.ADMIN_PASSWORD),
+                    'ADMIN'
+                ),
                 commit=True
             )
+
+
             execute_query(
                 "INSERT INTO users (username, email, password_hash, role) VALUES (%s, %s, %s, %s);",
-                ('store', 'store@techstore.com', generate_password_hash('store123'), 'STORE_PERSON'),
+                (
+                    'store',
+                    'store@techstore.com',
+                    generate_password_hash(Config.STORE_PASSWORD),
+                    'STORE_PERSON'
+                ),
                 commit=True
             )
 
@@ -124,4 +146,8 @@ CREATE TABLE IF NOT EXISTS products (
 init_and_seed_db()
 
 if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+    # Production-ready: no debug, localhost only
+    host = os.environ.get('HOST', '127.0.0.1')
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('APP_ENV', 'development').lower() == 'development'
+    app.run(host=host, port=port, debug=debug)
