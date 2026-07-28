@@ -1,12 +1,55 @@
 from flask import Blueprint, render_template, redirect, url_for, flash, request, session, make_response, current_app
 from flask_login import login_user, logout_user, login_required
 from app.models.users import User, role_required
-from datetime import datetime
+from datetime import datetime, timedelta
 from app.config import Config
 from psycopg2 import OperationalError
 
 
 auth_bp = Blueprint('auth', __name__)
+
+
+def _clear_login_lock_session():
+    session.pop('login_lock_identifier', None)
+    session.pop('login_lock_until', None)
+
+
+def _get_login_lock_context(default_identifier=''):
+    lock_identifier = session.get('login_lock_identifier')
+    lock_until_raw = session.get('login_lock_until')
+
+    if not lock_identifier or not lock_until_raw:
+        return {
+            'login_locked': False,
+            'lock_remaining_seconds': 0,
+            'locked_identifier': default_identifier or ''
+        }
+
+    try:
+        lock_until = datetime.fromisoformat(lock_until_raw)
+    except ValueError:
+        _clear_login_lock_session()
+        return {
+            'login_locked': False,
+            'lock_remaining_seconds': 0,
+            'locked_identifier': default_identifier or ''
+        }
+
+    remaining_seconds = int((lock_until - datetime.now()).total_seconds())
+
+    if remaining_seconds <= 0:
+        _clear_login_lock_session()
+        return {
+            'login_locked': False,
+            'lock_remaining_seconds': 0,
+            'locked_identifier': default_identifier or ''
+        }
+
+    return {
+        'login_locked': True,
+        'lock_remaining_seconds': remaining_seconds,
+        'locked_identifier': lock_identifier
+    }
 
 @auth_bp.route('/register', methods=['GET', 'POST'])
 @login_required
@@ -17,7 +60,8 @@ def register():
         email = request.form.get('email', '').strip().lower()
         password = request.form.get('password')
         confirm_password = request.form.get('confirm_password')
-        role = request.form.get('role', 'STORE_PERSON')
+        # Security policy: this flow is for staff registration only.
+        role = 'STORE_PERSON'
 
         # Input validation
         validation_errors = User.validate_input(username, email, password)
@@ -42,18 +86,26 @@ def register():
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
 def login():
+    if request.method == 'GET':
+        return render_template('auth/login.html', **_get_login_lock_context())
+
     if request.method == 'POST':
         identifier = request.form.get('identifier', '').strip()
         password = request.form.get('password', '')
 
+        lock_ctx = _get_login_lock_context(default_identifier=identifier)
+        if lock_ctx['login_locked']:
+            flash('This login is temporarily locked. Please wait for the cooldown timer.', 'warning')
+            return render_template('auth/login.html', **lock_ctx)
+
         # Input validation
         if not identifier or not password:
             flash('Username/Email and password are required.', 'danger')
-            return render_template('auth/login.html')
+            return render_template('auth/login.html', **_get_login_lock_context(default_identifier=identifier))
 
         if len(identifier) > 100 or len(password) > 128:
             flash('Invalid input detected.', 'danger')
-            return render_template('auth/login.html')
+            return render_template('auth/login.html', **_get_login_lock_context(default_identifier=identifier))
 
         try:
             user = User.get_by_username_or_email(identifier)
@@ -67,14 +119,16 @@ def login():
                 "danger"
             )
 
-            return render_template("auth/login.html")
+            return render_template("auth/login.html", **_get_login_lock_context(default_identifier=identifier))
 
 
         # Check if account is locked
         if user and User.is_account_locked(user):
-            remaining_time = (user.locked_until - datetime.now()).seconds // 60
-            flash(f'Account locked. Try again in {remaining_time} minutes.', 'danger')
-            return render_template('auth/login.html')
+            session['login_lock_identifier'] = user.username or identifier
+            session['login_lock_until'] = user.locked_until.isoformat() if user.locked_until else ''
+
+            flash('Account temporarily locked. Please wait for the cooldown timer.', 'danger')
+            return render_template('auth/login.html', **_get_login_lock_context(default_identifier=identifier))
 
         if user and user.check_password(password):
             # Clear failed attempts on successful login
@@ -91,6 +145,8 @@ def login():
             # Enable timeout
             session.permanent = True
             session.modified = True
+
+            _clear_login_lock_session()
             
             flash('Logged in successfully!', 'success')
             return redirect(url_for('stock.dashboard'))
@@ -101,16 +157,19 @@ def login():
                 # Check if just locked
                 updated_user = User.get_by_id(user.id)
                 if User.is_account_locked(updated_user):
-                    flash('Account locked due to multiple failed attempts. Try again in 30 minutes.', 'danger')
+                    session['login_lock_identifier'] = updated_user.username or identifier
+                    session['login_lock_until'] = updated_user.locked_until.isoformat() if updated_user.locked_until else ''
+                    flash('Account temporarily locked. Please wait for the cooldown timer.', 'danger')
                 else:
-                    attempts_left = 5 - updated_user.failed_login_attempts
-                    flash(f'Invalid credentials. {attempts_left} attempts remaining before lockout.', 'danger')
+                    _clear_login_lock_session()
+                    flash('Invalid username/email or password.', 'danger')
             else:
+                _clear_login_lock_session()
                 flash('Invalid username/email or password.', 'danger')
 
-    return render_template('auth/login.html')
+    return render_template('auth/login.html', **_get_login_lock_context(default_identifier=identifier))
 
-@auth_bp.route('/logout')
+@auth_bp.route('/logout', methods=['POST'])
 @login_required
 def logout():
 
@@ -187,6 +246,8 @@ def forgot_password():
         # Admin recovery
         if user.role == 'ADMIN':
             session['recovery_user_id'] = user.id
+            session['recovery_attempts'] = 0
+            session['recovery_started_at'] = datetime.utcnow().isoformat()
             return redirect(
                 url_for('auth.verify_recovery_code')
             )
@@ -201,9 +262,35 @@ def forgot_password():
 @auth_bp.route('/verify-recovery-code', methods=['GET', 'POST'])
 def verify_recovery_code():
     recovery_user_id = session.get('recovery_user_id')
+    started_at_raw = session.get('recovery_started_at')
+    attempts = int(session.get('recovery_attempts', 0))
     
     if not recovery_user_id:
         flash('Invalid recovery session. Please try again.', 'danger')
+        return redirect(url_for('auth.forgot_password'))
+
+    if not started_at_raw:
+        session.pop('recovery_user_id', None)
+        flash('Recovery session expired. Please try again.', 'danger')
+        return redirect(url_for('auth.forgot_password'))
+
+    try:
+        started_at = datetime.fromisoformat(started_at_raw)
+    except ValueError:
+        started_at = None
+
+    if not started_at or datetime.utcnow() - started_at > timedelta(minutes=Config.RECOVERY_SESSION_TTL_MINUTES):
+        session.pop('recovery_user_id', None)
+        session.pop('recovery_attempts', None)
+        session.pop('recovery_started_at', None)
+        flash('Recovery session expired. Please start over.', 'danger')
+        return redirect(url_for('auth.forgot_password'))
+
+    if attempts >= Config.MAX_RECOVERY_ATTEMPTS:
+        session.pop('recovery_user_id', None)
+        session.pop('recovery_attempts', None)
+        session.pop('recovery_started_at', None)
+        flash('Too many invalid attempts. Please start recovery again.', 'danger')
         return redirect(url_for('auth.forgot_password'))
     
     if request.method == 'POST':
@@ -212,8 +299,10 @@ def verify_recovery_code():
         if User.is_recovery_code_valid(code):
             session['recovery_verified'] = True
             session['recovery_user_id'] = recovery_user_id
+            session.pop('recovery_attempts', None)
             return redirect(url_for('auth.reset_password'))
         else:
+            session['recovery_attempts'] = attempts + 1
             flash('Invalid recovery code. Please try again.', 'danger')
     
     return render_template('auth/verify_recovery_code.html')
@@ -250,6 +339,8 @@ def reset_password():
         # Clear session
         session.pop('recovery_verified', None)
         session.pop('recovery_user_id', None)
+        session.pop('recovery_attempts', None)
+        session.pop('recovery_started_at', None)
         
         flash('Password reset successfully! Please login with your new password.', 'success')
         return redirect(url_for('auth.login'))

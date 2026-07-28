@@ -1,6 +1,10 @@
 import logging
 import sys
 from flask import Flask, session, request, jsonify, render_template, redirect, flash, url_for
+from psycopg2 import OperationalError
+from werkzeug.middleware.proxy_fix import ProxyFix
+from werkzeug.exceptions import HTTPException
+
 from flask_login import LoginManager
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
@@ -22,6 +26,19 @@ def load_user(user_id):
 def create_app(config_class=Config):
     app = Flask(__name__)
     app.config.from_object(config_class)
+
+    if app.config.get('APP_ENV') == 'production':
+        secret_key = app.config.get('SECRET_KEY')
+        if not secret_key or secret_key == 'default-dev-key':
+            raise RuntimeError('SECRET_KEY must be set to a strong value in production.')
+
+        # Ensure Flask does not leak debug tracebacks in production responses.
+        app.config['PROPAGATE_EXCEPTIONS'] = False
+        app.config['TRAP_HTTP_EXCEPTIONS'] = False
+        app.config['TRAP_BAD_REQUEST_ERRORS'] = False
+
+    # Respect Render/reverse proxy headers for scheme and client IP.
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
     # Configure logging
     log_level = logging.DEBUG if app.config.get('APP_ENV') == 'development' else logging.INFO
@@ -73,6 +90,12 @@ def create_app(config_class=Config):
         
         # Referrer Policy
         response.headers['Referrer-Policy'] = 'strict-origin-when-cross-origin'
+
+        # Reduce MIME sniffing risks
+        response.headers['X-Content-Type-Options'] = 'nosniff'
+
+        # Restrict powerful browser features by default
+        response.headers['Permissions-Policy'] = 'camera=(), microphone=(), geolocation=()'
         
         # Content Security Policy
         response.headers['Content-Security-Policy'] = (
@@ -103,8 +126,27 @@ def create_app(config_class=Config):
 
     @app.errorhandler(500)
     def internal_error(error):
-        app.logger.error(f"500 Internal Error: {request.path} - {str(error)}")
-        return render_template('errors/500.html'), 500
+
+        app.logger.exception(
+            f"500 Internal Error: {request.path}"
+        )
+
+        return render_template("errors/500.html"), 500
+
+    @app.errorhandler(Exception)
+    def handle_unexpected_error(error):
+        # Let explicit HTTP handlers (404/403/429 etc.) continue to work.
+        if isinstance(error, HTTPException):
+            return error
+
+        app.logger.exception(f"Unhandled exception on {request.path}")
+
+        if app.config.get('APP_ENV') == 'production':
+            return render_template('errors/500.html'), 500
+
+        # In development, re-raise so local debugging remains easy.
+        raise error
+
 
     @app.errorhandler(429)
     def ratelimit_error(error):
@@ -123,5 +165,9 @@ def create_app(config_class=Config):
     
     # Apply rate limiting to login endpoint
     limiter.limit("5 per 15 minutes")(app.view_functions['auth.login'])
+    limiter.limit("5 per 15 minutes")(app.view_functions['auth.forgot_password'])
+    limiter.limit("5 per 15 minutes")(app.view_functions['auth.verify_recovery_code'])
+    limiter.limit("5 per 15 minutes")(app.view_functions['auth.reset_password'])
+    limiter.limit("20 per hour")(app.view_functions['store.confirm_order'])
 
     return app

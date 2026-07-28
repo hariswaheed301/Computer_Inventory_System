@@ -1,5 +1,6 @@
 import os
 import math
+import uuid
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, current_app
 from flask_login import login_required, current_user
 from werkzeug.utils import secure_filename
@@ -9,6 +10,7 @@ from app.models.users import role_required
 stock_bp = Blueprint('stock', __name__)
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+ALLOWED_IMAGE_MIMETYPES = {'image/png', 'image/jpeg', 'image/webp'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -413,18 +415,32 @@ def add_product():
         sku = request.form.get('sku', '').strip()
         name = request.form.get('name', '').strip()
         description = request.form.get('description', '').strip()
-        brand_id = int(request.form.get('brand_id'))
-        category_id = int(request.form.get('category_id'))
-        quantity = int(request.form.get('quantity', 0))
-        reorder_level = int(request.form.get('reorder_level', 5))
-        cost_price = float(request.form.get('cost_price', 0.0))
-        retail_price = float(request.form.get('retail_price', 0.0))
+        try:
+            brand_id = int(request.form.get('brand_id'))
+            category_id = int(request.form.get('category_id'))
+            quantity = int(request.form.get('quantity', 0))
+            reorder_level = int(request.form.get('reorder_level', 5))
+            cost_price = float(request.form.get('cost_price', 0.0))
+            retail_price = float(request.form.get('retail_price', 0.0))
+        except (TypeError, ValueError):
+            flash('Invalid product values provided.', 'danger')
+            return redirect(url_for('stock.add_product'))
+
+        if quantity < 0 or reorder_level < 0 or cost_price < 0 or retail_price < 0:
+            flash('Quantity and prices must be zero or positive.', 'danger')
+            return redirect(url_for('stock.add_product'))
 
         filename = 'default_product.png'
         file = request.files.get('image')
         if file and file.filename != '' and allowed_file(file.filename):
-            filename = secure_filename(f"{sku}_{file.filename}")
+            if file.mimetype not in ALLOWED_IMAGE_MIMETYPES:
+                flash('Invalid image type. Use PNG, JPG, JPEG, or WEBP.', 'danger')
+                return redirect(url_for('stock.add_product'))
+
+            ext = secure_filename(file.filename).rsplit('.', 1)[1].lower()
+            filename = f"{sku}_{uuid.uuid4().hex[:12]}.{ext}"
             upload_path = os.path.join(current_app.root_path, 'static/uploads/products', filename)
+            os.makedirs(os.path.dirname(upload_path), exist_ok=True)
             file.save(upload_path)
 
         query = """
@@ -453,18 +469,32 @@ def edit_product(product_id):
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
         description = request.form.get('description', '').strip()
-        brand_id = int(request.form.get('brand_id'))
-        category_id = int(request.form.get('category_id'))
-        quantity = int(request.form.get('quantity'))
-        reorder_level = int(request.form.get('reorder_level'))
-        cost_price = float(request.form.get('cost_price'))
-        retail_price = float(request.form.get('retail_price'))
+        try:
+            brand_id = int(request.form.get('brand_id'))
+            category_id = int(request.form.get('category_id'))
+            quantity = int(request.form.get('quantity'))
+            reorder_level = int(request.form.get('reorder_level'))
+            cost_price = float(request.form.get('cost_price'))
+            retail_price = float(request.form.get('retail_price'))
+        except (TypeError, ValueError):
+            flash('Invalid product values provided.', 'danger')
+            return redirect(url_for('stock.edit_product', product_id=product_id))
+
+        if quantity < 0 or reorder_level < 0 or cost_price < 0 or retail_price < 0:
+            flash('Quantity and prices must be zero or positive.', 'danger')
+            return redirect(url_for('stock.edit_product', product_id=product_id))
 
         filename = product['image_url']
         file = request.files.get('image')
         if file and file.filename != '' and allowed_file(file.filename):
-            filename = secure_filename(f"{product['sku']}_{file.filename}")
+            if file.mimetype not in ALLOWED_IMAGE_MIMETYPES:
+                flash('Invalid image type. Use PNG, JPG, JPEG, or WEBP.', 'danger')
+                return redirect(url_for('stock.edit_product', product_id=product_id))
+
+            ext = secure_filename(file.filename).rsplit('.', 1)[1].lower()
+            filename = f"{product['sku']}_{uuid.uuid4().hex[:12]}.{ext}"
             upload_path = os.path.join(current_app.root_path, 'static/uploads/products', filename)
+            os.makedirs(os.path.dirname(upload_path), exist_ok=True)
             file.save(upload_path)
 
         update_query = """

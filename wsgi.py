@@ -143,7 +143,72 @@ CREATE TABLE IF NOT EXISTS products (
                     """,
                     p, commit=True
                 )
-init_and_seed_db()
+
+
+def init_database():
+    """Create/update schema without demo seeding for production startup scripts."""
+    with app.app_context():
+        tables = [
+            """
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username VARCHAR(50) UNIQUE NOT NULL,
+                email VARCHAR(100) UNIQUE NOT NULL,
+                password_hash VARCHAR(255) NOT NULL,
+                role VARCHAR(20) NOT NULL DEFAULT 'STORE_PERSON',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                failed_login_attempts INT DEFAULT 0,
+                is_locked BOOLEAN DEFAULT FALSE,
+                locked_until TIMESTAMP,
+                last_login_attempt TIMESTAMP
+            );
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS categories (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(50) NOT NULL,
+                parent_id INT REFERENCES categories(id) ON DELETE SET NULL
+            );
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS brands (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(50) UNIQUE NOT NULL
+            );
+            """,
+            """
+            CREATE TABLE IF NOT EXISTS products (
+                id SERIAL PRIMARY KEY,
+                sku VARCHAR(50) UNIQUE NOT NULL,
+                name VARCHAR(100) NOT NULL,
+                description TEXT,
+                image_url VARCHAR(255) DEFAULT 'default_product.png',
+                brand_id INT NOT NULL REFERENCES brands(id) ON DELETE CASCADE,
+                category_id INT NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+                quantity INT NOT NULL DEFAULT 0,
+                reorder_level INT NOT NULL DEFAULT 5,
+                cost_price NUMERIC(10, 2) NOT NULL,
+                retail_price NUMERIC(10, 2) NOT NULL
+            );
+            """
+        ]
+
+        for t in tables:
+            execute_query(t, commit=True)
+
+        migrations = [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS failed_login_attempts INT DEFAULT 0;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS is_locked BOOLEAN DEFAULT FALSE;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS locked_until TIMESTAMP;",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS last_login_attempt TIMESTAMP;",
+        ]
+
+        for migration in migrations:
+            execute_query(migration, commit=True)
+
+
+if os.environ.get('APP_ENV', 'development').lower() == 'development':
+    init_and_seed_db()
 
 if __name__ == '__main__':
     # Production-ready: no debug, localhost only

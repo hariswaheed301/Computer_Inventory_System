@@ -41,13 +41,18 @@ class Config:
     # Refresh expiry on every request
     SESSION_REFRESH_EACH_REQUEST = True
 
+    # Upload limit (5 MB)
+    MAX_CONTENT_LENGTH = 5 * 1024 * 1024
+
     
     
     # Scheme & Redirect
     PREFERRED_URL_SCHEME = 'https' if APP_ENV == 'production' else 'http'
     
     # Admin Recovery Code for Password Reset
-    ADMIN_RECOVERY_CODE = os.environ.get('ADMIN_RECOVERY_CODE', '')
+    ADMIN_RECOVERY_CODE = os.environ.get('ADMIN_RECOVERY_CODE', '').strip()
+    RECOVERY_SESSION_TTL_MINUTES = int(os.environ.get('RECOVERY_SESSION_TTL_MINUTES', 10))
+    MAX_RECOVERY_ATTEMPTS = int(os.environ.get('MAX_RECOVERY_ATTEMPTS', 5))
 
     # Rate Limiter Config
     RATELIMIT_STORAGE_URI = os.environ.get(

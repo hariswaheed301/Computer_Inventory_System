@@ -20,7 +20,18 @@
               {% with messages = get_flashed_messages(with_categories=true) %}
               {% if messages %} {% for category, message in messages %}
               <div class="alert alert-{{ category }}">{{ message }}</div>
-              {% endfor %} {% endif %} {% endwith %}
+              {% endfor %} {% endif %} {% endwith %} {% if login_locked %}
+              <div
+                class="alert alert-warning"
+                id="lockoutMessage"
+                data-remaining-seconds="{{ lock_remaining_seconds }}"
+              >
+                <strong>Account temporarily locked.</strong>
+                You can try again in
+                <span id="lockoutCountdown">{{ lock_remaining_seconds }}</span>
+                seconds.
+              </div>
+              {% endif %}
 
               <form
                 id="loginForm"
@@ -39,7 +50,14 @@
                     id="identifierInput"
                     type="text"
                     placeholder="Username or Email"
-                    autocomplete="off"
+                    value="{{ locked_identifier or '' }}"
+                    autocomplete="username"
+                    {%
+                    if
+                    login_locked
+                    %}disabled{%
+                    endif
+                    %}
                     required
                   />
                   <label>Username or Email</label>
@@ -51,12 +69,28 @@
                     id="passwordInput"
                     type="password"
                     placeholder="Password"
-                    autocomplete="off"
+                    autocomplete="current-password"
+                    {%
+                    if
+                    login_locked
+                    %}disabled{%
+                    endif
+                    %}
                     required
                   />
                   <label>Password</label>
                 </div>
-                <button class="btn btn-primary w-100 py-2" type="submit">
+                <button
+                  class="btn btn-primary w-100 py-2"
+                  type="submit"
+                  id="loginSubmitBtn"
+                  {%
+                  if
+                  login_locked
+                  %}disabled{%
+                  endif
+                  %}
+                >
                   Sign In
                 </button>
                 <div class="text-center mt-3">
@@ -72,5 +106,49 @@
         </div>
       </div>
     </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        var lockoutMessage = document.getElementById("lockoutMessage");
+        if (!lockoutMessage) return;
+
+        var countdownEl = document.getElementById("lockoutCountdown");
+        var identifierInput = document.getElementById("identifierInput");
+        var passwordInput = document.getElementById("passwordInput");
+        var submitBtn = document.getElementById("loginSubmitBtn");
+        var remaining = parseInt(
+          lockoutMessage.dataset.remainingSeconds || "0",
+          10
+        );
+
+        var unlock = function () {
+          lockoutMessage.classList.remove("alert-warning");
+          lockoutMessage.classList.add("alert-success");
+          lockoutMessage.innerHTML = "Cooldown finished. You can sign in now.";
+          if (identifierInput) identifierInput.disabled = false;
+          if (passwordInput) passwordInput.disabled = false;
+          if (submitBtn) submitBtn.disabled = false;
+        };
+
+        if (isNaN(remaining) || remaining <= 0) {
+          unlock();
+          return;
+        }
+
+        var timer = setInterval(function () {
+          remaining -= 1;
+
+          if (remaining <= 0) {
+            clearInterval(timer);
+            unlock();
+            return;
+          }
+
+          if (countdownEl) {
+            countdownEl.textContent = String(remaining);
+          }
+        }, 1000);
+      });
+    </script>
   </body>
 </html>
