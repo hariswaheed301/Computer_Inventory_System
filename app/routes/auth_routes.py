@@ -3,6 +3,8 @@ from flask_login import login_user, logout_user, login_required
 from app.models.users import User, role_required
 from datetime import datetime
 from app.config import Config
+from psycopg2 import OperationalError
+
 
 auth_bp = Blueprint('auth', __name__)
 
@@ -53,7 +55,20 @@ def login():
             flash('Invalid input detected.', 'danger')
             return render_template('auth/login.html')
 
-        user = User.get_by_username_or_email(identifier)
+        try:
+            user = User.get_by_username_or_email(identifier)
+
+        except OperationalError:
+
+            current_app.logger.exception("Database unavailable during login.")
+
+            flash(
+                "Database temporarily unavailable. Please try again.",
+                "danger"
+            )
+
+            return render_template("auth/login.html")
+
 
         # Check if account is locked
         if user and User.is_account_locked(user):
