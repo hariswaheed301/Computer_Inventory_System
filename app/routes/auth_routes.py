@@ -14,6 +14,28 @@ def _clear_login_lock_session():
     session.pop('login_lock_until', None)
 
 
+def _clear_recovery_session():
+    session.pop('recovery_verified', None)
+    session.pop('recovery_user_id', None)
+    session.pop('recovery_attempts', None)
+    session.pop('recovery_started_at', None)
+
+
+def _get_recovery_ttl_seconds():
+    started_at_raw = session.get('recovery_started_at')
+    if not started_at_raw:
+        return None
+
+    try:
+        started_at = datetime.fromisoformat(started_at_raw)
+    except ValueError:
+        return None
+
+    expires_at = started_at + timedelta(minutes=Config.RECOVERY_SESSION_TTL_MINUTES)
+    remaining = int((expires_at - datetime.utcnow()).total_seconds())
+    return max(0, remaining)
+
+
 def _get_login_lock_context(default_identifier=''):
     lock_identifier = session.get('login_lock_identifier')
     lock_until_raw = session.get('login_lock_until')
@@ -262,34 +284,25 @@ def forgot_password():
 @auth_bp.route('/verify-recovery-code', methods=['GET', 'POST'])
 def verify_recovery_code():
     recovery_user_id = session.get('recovery_user_id')
-    started_at_raw = session.get('recovery_started_at')
     attempts = int(session.get('recovery_attempts', 0))
     
     if not recovery_user_id:
         flash('Invalid recovery session. Please try again.', 'danger')
         return redirect(url_for('auth.forgot_password'))
 
-    if not started_at_raw:
-        session.pop('recovery_user_id', None)
+    ttl_seconds = _get_recovery_ttl_seconds()
+    if ttl_seconds is None:
+        _clear_recovery_session()
         flash('Recovery session expired. Please try again.', 'danger')
         return redirect(url_for('auth.forgot_password'))
 
-    try:
-        started_at = datetime.fromisoformat(started_at_raw)
-    except ValueError:
-        started_at = None
-
-    if not started_at or datetime.utcnow() - started_at > timedelta(minutes=Config.RECOVERY_SESSION_TTL_MINUTES):
-        session.pop('recovery_user_id', None)
-        session.pop('recovery_attempts', None)
-        session.pop('recovery_started_at', None)
+    if ttl_seconds <= 0:
+        _clear_recovery_session()
         flash('Recovery session expired. Please start over.', 'danger')
         return redirect(url_for('auth.forgot_password'))
 
     if attempts >= Config.MAX_RECOVERY_ATTEMPTS:
-        session.pop('recovery_user_id', None)
-        session.pop('recovery_attempts', None)
-        session.pop('recovery_started_at', None)
+        _clear_recovery_session()
         flash('Too many invalid attempts. Please start recovery again.', 'danger')
         return redirect(url_for('auth.forgot_password'))
     
@@ -305,12 +318,18 @@ def verify_recovery_code():
             session['recovery_attempts'] = attempts + 1
             flash('Invalid recovery code. Please try again.', 'danger')
     
-    return render_template('auth/verify_recovery_code.html')
+    return render_template('auth/verify_recovery_code.html', recovery_ttl_seconds=ttl_seconds)
 
 @auth_bp.route('/reset-password', methods=['GET', 'POST'])
 def reset_password():
     if not session.get('recovery_verified'):
         flash('Recovery verification required. Please start over.', 'danger')
+        return redirect(url_for('auth.forgot_password'))
+
+    ttl_seconds = _get_recovery_ttl_seconds()
+    if ttl_seconds is None or ttl_seconds <= 0:
+        _clear_recovery_session()
+        flash('Recovery session expired. Please start over.', 'danger')
         return redirect(url_for('auth.forgot_password'))
     
     recovery_user_id = session.get('recovery_user_id')
@@ -321,31 +340,28 @@ def reset_password():
         
         if not new_password or not confirm_password:
             flash('Password fields are required.', 'danger')
-            return render_template('auth/reset_password.html')
+            return render_template('auth/reset_password.html', recovery_ttl_seconds=ttl_seconds)
         
         if new_password != confirm_password:
             flash('Passwords do not match.', 'danger')
-            return render_template('auth/reset_password.html')
+            return render_template('auth/reset_password.html', recovery_ttl_seconds=ttl_seconds)
         
         validation_errors = User.validate_input('temp', 'temp@temp.com', new_password)
         if validation_errors:
             for error in validation_errors:
                 flash(error, 'danger')
-            return render_template('auth/reset_password.html')
+            return render_template('auth/reset_password.html', recovery_ttl_seconds=ttl_seconds)
         
         # Update password
         User.update_password(recovery_user_id, new_password)
         
         # Clear session
-        session.pop('recovery_verified', None)
-        session.pop('recovery_user_id', None)
-        session.pop('recovery_attempts', None)
-        session.pop('recovery_started_at', None)
+        _clear_recovery_session()
         
         flash('Password reset successfully! Please login with your new password.', 'success')
         return redirect(url_for('auth.login'))
     
-    return render_template('auth/reset_password.html')
+    return render_template('auth/reset_password.html', recovery_ttl_seconds=ttl_seconds)
 
 @auth_bp.route('/manage-users')
 @login_required

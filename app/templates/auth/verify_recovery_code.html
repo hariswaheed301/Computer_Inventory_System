@@ -22,7 +22,17 @@
               <div class="alert alert-{{ category }}">{{ message }}</div>
               {% endfor %} {% endif %} {% endwith %}
 
+              <div
+                class="alert alert-info"
+                id="recoveryTtlMessage"
+                data-remaining-seconds="{{ recovery_ttl_seconds|default(0) }}"
+              >
+                Recovery session expires in
+                <strong><span id="recoveryTtlCountdown">{{ recovery_ttl_seconds|default(0) }}</span> sec</strong>.
+              </div>
+
               <form
+                id="verifyRecoveryForm"
                 method="POST"
                 action="{{ url_for('auth.verify_recovery_code') }}"
               >
@@ -37,6 +47,7 @@
                 <div class="form-floating mb-3">
                   <input
                     class="form-control"
+                    id="recoveryCodeInput"
                     name="recovery_code"
                     type="password"
                     placeholder="Recovery Code"
@@ -44,7 +55,7 @@
                   />
                   <label>Recovery Code</label>
                 </div>
-                <button class="btn btn-primary w-100 py-2" type="submit">
+                <button class="btn btn-primary w-100 py-2" id="verifyRecoveryBtn" type="submit">
                   Verify Code
                 </button>
               </form>
@@ -58,5 +69,43 @@
         </div>
       </div>
     </div>
+
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        var ttlMessage = document.getElementById("recoveryTtlMessage");
+        var countdownEl = document.getElementById("recoveryTtlCountdown");
+        var codeInput = document.getElementById("recoveryCodeInput");
+        var submitBtn = document.getElementById("verifyRecoveryBtn");
+        if (!ttlMessage) return;
+
+        var remaining = parseInt(ttlMessage.dataset.remainingSeconds || "0", 10);
+
+        var expireUi = function () {
+          ttlMessage.classList.remove("alert-info");
+          ttlMessage.classList.add("alert-danger");
+          ttlMessage.textContent = "Recovery session expired. Go back and start again.";
+          if (codeInput) codeInput.disabled = true;
+          if (submitBtn) submitBtn.disabled = true;
+        };
+
+        if (isNaN(remaining) || remaining <= 0) {
+          expireUi();
+          return;
+        }
+
+        var timer = setInterval(function () {
+          remaining -= 1;
+          if (remaining <= 0) {
+            clearInterval(timer);
+            expireUi();
+            return;
+          }
+
+          if (countdownEl) {
+            countdownEl.textContent = String(remaining);
+          }
+        }, 1000);
+      });
+    </script>
   </body>
 </html>
