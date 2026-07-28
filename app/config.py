@@ -60,7 +60,7 @@ class Config:
     "memory://"
 )
 
-    RATELIMIT_DEFAULT = "200/day;50/hour" 
+    RATELIMIT_DEFAULT = "400/day;100/hour" 
    
     ADMIN_CONTACT_EMAIL = os.environ.get(
     "ADMIN_CONTACT_EMAIL",

@@ -163,11 +163,11 @@ def create_app(config_class=Config):
     app.register_blueprint(stock_bp)
     app.register_blueprint(store_bp)
     
-    # Apply rate limiting to login endpoint
-    limiter.limit("5 per 15 minutes")(app.view_functions['auth.login'])
-    limiter.limit("5 per 15 minutes")(app.view_functions['auth.forgot_password'])
-    limiter.limit("5 per 15 minutes")(app.view_functions['auth.verify_recovery_code'])
-    limiter.limit("5 per 15 minutes")(app.view_functions['auth.reset_password'])
-    limiter.limit("20 per hour")(app.view_functions['store.confirm_order'])
+    # Apply endpoint-specific rate limits.
+    limiter.limit("10 per 15 minutes")(app.view_functions['auth.login'])
+    limiter.limit("8 per 15 minutes")(app.view_functions['auth.forgot_password'])
+    limiter.limit("8 per 15 minutes")(app.view_functions['auth.verify_recovery_code'])
+    limiter.limit("8 per 15 minutes")(app.view_functions['auth.reset_password'])
+    limiter.limit("40 per hour")(app.view_functions['store.confirm_order'])
 
     return app
